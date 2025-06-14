@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Text.Json;
@@ -7,6 +6,7 @@ using System.Threading.Tasks;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
+using System.Text;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.Functions.Worker.Extensions.SignalRService;
@@ -19,10 +19,10 @@ namespace AnkietySystem
     {
         private readonly ApplicationDbContext _context;
         private readonly ILogger<PollFunctions> _logger;
-        // W praktyce pobierz te wartości z konfiguracji lub zmiennych środowiskowych!
-        private const string JwtIssuer = "https://your-issuer/";
-        private const string JwtAudience = "your-audience";
-        private const string JwtSecurityKey = "your-256-bit-secret"; // Tylko do testów!
+
+        private const string JwtIssuer = "https://ankietyapi-da.azurewebsites.net/";
+        private const string JwtAudience = "ankietyapi-users";
+        private const string JwtSecurityKey = "super-secret-key-1234-super-long-key!!!";
 
         public PollFunctions(ApplicationDbContext context, ILogger<PollFunctions> logger)
         {
@@ -55,7 +55,7 @@ namespace AnkietySystem
                 ValidateAudience = true,
                 ValidAudience = JwtAudience,
                 ValidateIssuerSigningKey = true,
-                IssuerSigningKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(JwtSecurityKey)),
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(JwtSecurityKey)),
                 ValidateLifetime = true
             };
             try
@@ -67,6 +67,74 @@ namespace AnkietySystem
             {
                 error = "Nieprawidłowy token: " + ex.Message;
                 return null;
+            }
+        }
+
+        [Function("login")]
+        public async Task<HttpResponseData> Login(
+            [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "login")] HttpRequestData req)
+        {
+            string body = await new StreamReader(req.Body).ReadToEndAsync();
+            _logger.LogInformation("Login body: " + body);
+
+            LoginRequest loginReq = null;
+            try
+            {
+                loginReq = JsonSerializer.Deserialize<LoginRequest>(body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Deserialization error: {ex.Message}");
+                var resp = req.CreateResponse(HttpStatusCode.BadRequest);
+                await resp.WriteStringAsync("Nieprawidłowy JSON: " + ex.Message);
+                return resp;
+            }
+
+            _logger.LogInformation($"Parsed login: {loginReq?.Username}, {loginReq?.Password}");
+
+            if (loginReq == null ||
+                string.IsNullOrWhiteSpace(loginReq.Username) ||
+                string.IsNullOrWhiteSpace(loginReq.Password) ||
+                !string.Equals(loginReq.Username, "admin", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(loginReq.Password, "admin123", StringComparison.Ordinal))
+            {
+                var resp = req.CreateResponse(HttpStatusCode.Unauthorized);
+                await resp.WriteStringAsync("Błędny login lub hasło");
+                _logger.LogWarning($"Nieudana próba logowania: {loginReq?.Username}, {loginReq?.Password}");
+                return resp;
+            }
+
+            try
+            {
+                var key = Encoding.UTF8.GetBytes(JwtSecurityKey);
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var tokenDescriptor = new SecurityTokenDescriptor
+                {
+                    Subject = new ClaimsIdentity(new[] {
+                        new Claim("sub", loginReq.Username),
+                        new Claim(ClaimTypes.Name, loginReq.Username)
+                    }),
+                    Expires = DateTime.UtcNow.AddHours(2),
+                    Issuer = JwtIssuer,
+                    Audience = JwtAudience,
+                    SigningCredentials = new SigningCredentials(
+                        new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+                };
+                var token = tokenHandler.CreateToken(tokenDescriptor);
+                var jwt = tokenHandler.WriteToken(token);
+
+                var response = req.CreateResponse(HttpStatusCode.OK);
+                response.Headers.Add("Content-Type", "application/json");
+                await response.WriteStringAsync(JsonSerializer.Serialize(new { token = jwt }));
+                _logger.LogInformation($"Token wygenerowany dla użytkownika: {loginReq.Username}");
+                return response;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Token generation error: {ex}");
+                var resp = req.CreateResponse(HttpStatusCode.InternalServerError);
+                await resp.WriteStringAsync("Błąd generowania tokena: " + ex.Message);
+                return resp;
             }
         }
 
@@ -83,13 +151,6 @@ namespace AnkietySystem
         public async Task<SignalRMessageAction> Vote(
             [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "polls/vote")] HttpRequestData req)
         {
-            var user = ValidateToken(req, out var error);
-            if (user == null)
-            {
-                _logger.LogWarning("Unauthorized vote attempt: " + error);
-                return null;
-            }
-
             _logger.LogInformation("Processing a vote request.");
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var voteRequest = JsonSerializer.Deserialize<VoteRequest>(requestBody);
@@ -112,14 +173,6 @@ namespace AnkietySystem
         public async Task<HttpResponseData> GetPoll(
             [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "polls/{id}")] HttpRequestData req, int id)
         {
-            var user = ValidateToken(req, out var error);
-            if (user == null)
-            {
-                var unauthorized = req.CreateResponse(HttpStatusCode.Unauthorized);
-                await unauthorized.WriteStringAsync(error ?? "Brak autoryzacji");
-                return unauthorized;
-            }
-
             _logger.LogInformation($"Getting poll with ID: {id}");
             var poll = await _context.Polls
                 .Include(p => p.Options)
@@ -165,5 +218,11 @@ namespace AnkietySystem
     public class VoteRequest
     {
         public int OptionId { get; set; }
+    }
+
+    public class LoginRequest
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
     }
 }

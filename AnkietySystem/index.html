@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 
-    <!-- SignalR (naprawione źródło) -->
+    <!-- SignalR -->
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
 
     <!-- tsParticles Stars Preset -->
@@ -75,6 +75,7 @@
 </div>
 
 <script>
+    // tsParticles tło
     (async () => {
         await loadStarsPreset(tsParticles);
         await tsParticles.load("tsparticles", {
@@ -83,24 +84,26 @@
         });
     })();
 
-    // Zmienna API (tylko raz!)
+    // --- Ankiety API ---
     const apiUrl = "https://ankietyapi-da.azurewebsites.net/api";
+    const pollId = 1; // <- zmień na ID nowej ankiety jeśli chcesz wyświetlać inną!
 
     const container = document.getElementById("poll-container");
     let currentPollData = null;
 
     async function fetchAndRenderPoll() {
+        container.innerHTML = "Ładowanie...";
         try {
-            const resp = await fetch(`${apiUrl}/polls/1`);
+            const resp = await fetch(`${apiUrl}/polls/${pollId}`);
             if (!resp.ok) {
-                container.innerHTML = `<p>Nie znaleziono ankiety.</p>`;
+                container.innerHTML = `<p>Nie znaleziono ankiety lub błąd API.</p>`;
                 return;
             }
             currentPollData = await resp.json();
             renderOptions();
         } catch (err) {
             container.innerHTML = `<p>Błąd ładowania danych.</p>`;
-            console.error(err);
+            console.error('Failed to fetch poll:', err);
         }
     }
 
@@ -111,22 +114,26 @@
         currentPollData.Options.forEach(opt => {
             const pct = total ? ((opt.Votes/total)*100).toFixed(1) : 0;
             html += `
-          <div class="option" onclick="vote(${opt.Id})" id="opt-${opt.Id}">
-            <strong>${opt.Text}</strong>
-            <div>${opt.Votes} głosów (${pct}%)</div>
-            <div class="bar-container"><div class="bar" style="width:${pct}%"></div></div>
-          </div>`;
+              <div class="option" onclick="vote(${opt.Id})" id="opt-${opt.Id}">
+                <strong>${opt.Text}</strong>
+                <div>${opt.Votes} głosów (${pct}%)</div>
+                <div class="bar-container"><div class="bar" style="width:${pct}%"></div></div>
+              </div>`;
         });
         container.innerHTML = html;
     }
 
+    // Głosowanie (publiczne)
     async function vote(id) {
         const el = document.getElementById(`opt-${id}`);
         if (el) el.style.pointerEvents = "none";
         try {
             await fetch(`${apiUrl}/polls/vote`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json"
+                    // Authorization NIE jest wymagany!
+                },
                 body: JSON.stringify({ OptionId: id })
             });
         } catch (e) {
@@ -137,9 +144,9 @@
         }, 1000);
     }
 
-    // SignalR real-time update
+    // SignalR – realtime update
     const conn = new signalR.HubConnectionBuilder()
-        .withUrl(apiUrl)
+        .withUrl(`${apiUrl}/negotiate`)
         .withAutomaticReconnect()
         .build();
 
@@ -158,7 +165,8 @@
             console.log("Połączono z SignalR");
             fetchAndRenderPoll();
         } catch (e) {
-            console.error("SignalR error", e);
+            console.error("Błąd połączenia z SignalR:", e);
+            fetchAndRenderPoll();
         }
     })();
 </script>
