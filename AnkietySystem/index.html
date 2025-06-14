@@ -9,25 +9,25 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
 
+    <!-- tsParticles -->
+    <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
+
     <!-- SignalR -->
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
-
-    <!-- tsParticles Stars Preset -->
-    <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tsparticles/preset-stars@3/tsparticles.preset.stars.bundle.min.js"></script>
 
     <style>
         body {
             margin: 0;
+            min-height: 100vh;
             font-family: 'Poppins', sans-serif;
-            background-color: #000;
+            background: linear-gradient(135deg, #0b001d 0%, #190032 100%);
             color: #fff;
             overflow: hidden;
         }
         #tsparticles {
             position: fixed;
             top: 0; left: 0;
-            width: 100%; height: 100%;
+            width: 100vw; height: 100vh;
             z-index: 0;
         }
         #app-container {
@@ -35,24 +35,24 @@
             z-index: 1;
             max-width: 700px;
             margin: 5vh auto;
-            background: rgba(0,0,0,0.7);
+            background: rgba(15,0,40,0.75);
             padding: 2rem;
             border-radius: 20px;
-            box-shadow: 0 0 20px rgba(255,255,255,0.1);
+            box-shadow: 0 0 30px 2px #2a004e99;
         }
         .option {
             margin: 1rem 0;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.07);
             padding: 1rem;
             border-radius: 12px;
             cursor: pointer;
             transition: background 0.3s;
         }
         .option:hover {
-            background: rgba(255,255,255,0.15);
+            background: rgba(121, 40, 202, 0.25);
         }
         .bar-container {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.13);
             height: 8px;
             border-radius: 5px;
             margin-top: 0.5rem;
@@ -60,7 +60,7 @@
         .bar {
             height: 100%;
             border-radius: 5px;
-            background: linear-gradient(to right, #00f2ff, #0055ff);
+            background: linear-gradient(to right, #5f2d8a, #2e003e 80%);
             width: 0;
             transition: width 0.3s ease;
         }
@@ -75,18 +75,58 @@
 </div>
 
 <script>
-    // tsParticles tło
+    // tsParticles – konfiguracja inspirowana particles.js, czarne i ciemnofioletowe kulki + linie
     (async () => {
-        await loadStarsPreset(tsParticles);
         await tsParticles.load("tsparticles", {
-            preset: "stars",
-            fullScreen: { enable: true, zIndex: 0 }
+            background: { color: "#0b001d" },
+            fpsLimit: 60,
+            particles: {
+                number: { value: 90, density: { enable: true, value_area: 900 } },
+                color: { value: ["#6d3fa9", "#2e003e", "#0b001d", "#9d53ff"] },
+                shape: { type: "circle" },
+                opacity: {
+                    value: 0.75,
+                    random: true,
+                    animation: { enable: false }
+                },
+                size: {
+                    value: 3.5,
+                    random: { enable: true, minimumValue: 1.2 }
+                },
+                links: {
+                    enable: true,
+                    distance: 140,
+                    color: "#37225b",
+                    opacity: 0.27,
+                    width: 1.3
+                },
+                move: {
+                    enable: true,
+                    speed: 1.6,
+                    direction: "none",
+                    random: false,
+                    straight: false,
+                    outModes: { default: "out" },
+                    attract: { enable: false }
+                }
+            },
+            interactivity: {
+                events: {
+                    onHover: { enable: true, mode: "repulse" },
+                    onClick: { enable: true, mode: "push" }
+                },
+                modes: {
+                    repulse: { distance: 110, duration: 0.4 },
+                    push: { quantity: 4 }
+                }
+            },
+            detectRetina: true
         });
     })();
 
     // --- Ankiety API ---
     const apiUrl = "https://ankietyapi-da.azurewebsites.net/api";
-    const pollId = 4; // <- zmień na ID nowej ankiety jeśli chcesz wyświetlać inną!
+    const pollId = 3; // <- zmień na ID nowej ankiety jeśli chcesz wyświetlać inną!
 
     const container = document.getElementById("poll-container");
     const title = document.getElementById("poll-title");
