@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8" />
-    <title>Ankieta z Tłem Stars</title>
+    <title>Ankieta</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <!-- Font & Icons -->
@@ -70,7 +70,7 @@
 <div id="tsparticles"></div>
 
 <div id="app-container">
-    <h1>Ankieta: Ulubiona Marka Samochodu</h1>
+    <h1 id="poll-title">Ankieta</h1>
     <div id="poll-container">Ładowanie...</div>
 </div>
 
@@ -86,9 +86,10 @@
 
     // --- Ankiety API ---
     const apiUrl = "https://ankietyapi-da.azurewebsites.net/api";
-    const pollId = 1; // <- zmień na ID nowej ankiety jeśli chcesz wyświetlać inną!
+    const pollId = 4; // <- zmień na ID nowej ankiety jeśli chcesz wyświetlać inną!
 
     const container = document.getElementById("poll-container");
+    const title = document.getElementById("poll-title");
     let currentPollData = null;
 
     async function fetchAndRenderPoll() {
@@ -96,12 +97,15 @@
         try {
             const resp = await fetch(`${apiUrl}/polls/${pollId}`);
             if (!resp.ok) {
+                title.textContent = "Ankieta";
                 container.innerHTML = `<p>Nie znaleziono ankiety lub błąd API.</p>`;
                 return;
             }
             currentPollData = await resp.json();
+            title.textContent = currentPollData.Question || "Ankieta";
             renderOptions();
         } catch (err) {
+            title.textContent = "Ankieta";
             container.innerHTML = `<p>Błąd ładowania danych.</p>`;
             console.error('Failed to fetch poll:', err);
         }
@@ -132,15 +136,16 @@
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
-                    // Authorization NIE jest wymagany!
                 },
                 body: JSON.stringify({ OptionId: id })
             });
         } catch (e) {
             console.error(e);
         }
+        // Dodaj odświeżenie, jeśli SignalR się nie połączył
         setTimeout(() => {
             if (el) el.style.pointerEvents = "auto";
+            fetchAndRenderPoll();
         }, 1000);
     }
 
@@ -150,8 +155,8 @@
         .withAutomaticReconnect()
         .build();
 
-    conn.on("newVote", (pollId, optionId, newVotes) => {
-        if (!currentPollData || pollId !== currentPollData.Id) return;
+    conn.on("newVote", (signalPollId, optionId, newVotes) => {
+        if (!currentPollData || signalPollId !== currentPollData.Id) return;
         const option = currentPollData.Options.find(o => o.Id === optionId);
         if (option) {
             option.Votes = newVotes;
